@@ -24,3 +24,5 @@ The four attribute values that the sec_time_rel attribute can take, are BEFORE, 
 ## Task
  To train a classifier to predict the "type_TLINK" between a given event "fromID_TLINK" and "adm_dis_TIMEX3". 
  Apart from the sentence where a relation was mentioned, it can be useful to consider the context of the sentence (e.g., document structure or adjacent sentences), which can be extracted from the "train/test_text.csv" file. To identify the context of a EVENT in the original document, "start_EVENT" and "end_EVENT", which indicate the starting and end character indexes of an EVENT mentioned in a document, can be useful.
+
+
