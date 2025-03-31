@@ -304,23 +304,27 @@ def intersect_time_intervals(intervals):
     :return: (start_time, end_time) 交集区间 或 None（若无交集）
     """
     if not intervals:
-        return (datetime.min, datetime.max, "NO INFO", [])
+        return None
     
-    starts = [parse(x[1]) if x[0] in ['at','after'] else datetime.min for x in intervals]
-    ends = [parse(x[1]) if x[0] in ['at','before'] else datetime.max for x in intervals] 
-    for i in range(len(ends)):
-        if intervals[i][0] in ['at','before'] and 'T' not in intervals[i][1]:
-            ends[i] = ends[i].replace(hour=23, minute=59, second=59) # 如果终止日期是某天，转化成当天23:59:59
+    default_min = datetime.min
+    default_max = datetime.max
+    starts = [parse(x[1], default=default_min) if x[0] in ['at','after'] else datetime.min for x in intervals]
+    ends = [parse(x[1], default=default_max) if x[0] in ['at','before'] else datetime.max for x in intervals] 
+    
+    # for i in range(len(ends)):
+    #     if intervals[i][0] in ['at','before'] and 'T' not in intervals[i][1]:
+    #         ends[i] = ends[i].replace(hour=23, minute=59, second=59) # 如果终止日期是某天，转化成当天23:59:59
  
     start_index, start_value = max(enumerate(starts), key=lambda x: x[1])
+    start_val_text = intervals[start_index][1]
     start_text = intervals[start_index][2]
     start_idxes = [i for i in range(len(starts)) if starts[i]==start_value]
     
     end_index, end_value = min(enumerate(ends), key=lambda x: x[1])
+    end_val_text = intervals[end_index][1]
     end_text = intervals[end_index][2]
     end_idxes = [i for i in range(len(ends)) if ends[i]==end_value]
     paths = [intervals[i][3] for i in list(set(start_idxes) | set(end_idxes))]
-
 
     if start_value <= end_value:
         if start_value == end_value:
@@ -333,9 +337,26 @@ def intersect_time_intervals(intervals):
             text = 'AFTER %s'%start_text
         else:
             text = "%s TO %s"%(start_text, end_text)
-        return (start_value, end_value, text, paths)
+        return (start_value, end_value, start_val_text, end_val_text, text, paths)
     else:
-        return None  
+        return None   
+
+def get_time_granularity(date_str):
+    """推断时间字符串的粒度"""
+    if re.fullmatch(r"\d{4}", date_str.upper()):
+        return "%Y"
+    elif re.fullmatch(r"\d{4}-\d{2}", date_str.upper()):
+        return "%Y-%m"
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str.upper()):
+        return "%Y-%m-%d"
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}-?T\d{2}", date_str.upper()):
+        return "%Y-%m-%dT%H"
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}-?T\d{2}:\d{2}", date_str.upper()):
+        return "%Y-%m-%dT%H:%M"
+    elif re.fullmatch(r"\d{4}-\d{2}-\d{2}-?T\d{2}:\d{2}:\d{2}", date_str.upper()):
+        return "%Y-%m-%dT%H:%M:%S"
+    else:
+        raise ValueError(f"Unsupported date format: {date_str}")
 
 def infer_head_start_time(G, out_paths):
     """
@@ -348,13 +369,14 @@ def infer_head_start_time(G, out_paths):
         """特殊逻辑处理 duration 节点的开始时间"""
         duration_text = G.nodes[node].get("text")
         duration = parse_duration(G.nodes[node].get("val"))
+        default_max = datetime.max
         
         if link_type == "BEFORE" or link_type == "BEFORE_OVERLAP":
             if inferred_time[0] == 'after': inferred_time = None
             if inferred_time:
                 inferred_time[0] == 'before'
-                new_time = parse(inferred_time[1]) - duration
-                inferred_time[1] = new_time.strftime("%Y-%m-%dT%H:%M:%S")
+                new_time = parse(inferred_time[1], default=default_max) - duration
+                inferred_time[1] = new_time.strftime(get_time_granularity(inferred_time[1]))
                 inferred_time[2] = f"{inferred_time[2]} - {duration_text}"
         elif link_type == "SIMULTANEOUS":
             pass # unchanged
@@ -364,8 +386,8 @@ def infer_head_start_time(G, out_paths):
             if inferred_time[0] == 'after': # before和at的情况不变
                 inferred_time = None
             else:
-                new_time = parse(inferred_time[1]) - duration
-                inferred_time[1] = new_time.strftime("%Y-%m-%dT%H:%M:%S")
+                new_time = parse(inferred_time[1], default=default_max) - duration
+                inferred_time[1] = new_time.strftime(get_time_granularity(inferred_time[1])) # 这个地方维持粒度和原来一致，一般应该不会出现duration粒度比原始时间还小的情况，如果出现，保持模糊性似乎也更合理
                 inferred_time[2] = f"{inferred_time[2]} - {duration_text}"
         elif link_type == "COVER":
             if inferred_time[0] == 'after': inferred_time = None
@@ -453,10 +475,14 @@ def infer_tail_start_time(G, out_paths):
         """特殊逻辑处理 duration 节点的开始时间"""
         duration_text = G.nodes[node].get("text")
         duration = parse_duration(G.nodes[node].get("val"))
+        default_min = datetime.min
         
         if link_type == "BEFORE" or link_type == "BEFORE_OVERLAP":
             if inferred_time[0] != 'before':
                 inferred_time[0] = 'after' 
+                new_time = parse(inferred_time[1], default=default_min) + duration
+                inferred_time[1] = new_time.strftime(get_time_granularity(inferred_time[1]))
+                inferred_time[2] = f"{inferred_time[2]} + {duration_text}"
             else:
                 inferred_time = None
         elif link_type == "SIMULTANEOUS":
@@ -466,6 +492,9 @@ def infer_tail_start_time(G, out_paths):
         elif link_type == "ENDED_BY":
             if inferred_time[0] != 'before':
                 inferred_time[0] = 'after' 
+                new_time = parse(inferred_time[1], default=default_min) + duration
+                inferred_time[1] = new_time.strftime(get_time_granularity(inferred_time[1]))
+                inferred_time[2] = f"{inferred_time[2]} + {duration_text}"
             else:
                 inferred_time = None
         elif link_type == "COVER":
@@ -484,7 +513,6 @@ def infer_tail_start_time(G, out_paths):
         else:
             return None
 
-        
 
     for path in out_paths:
         time_node = path[0]
@@ -580,13 +608,17 @@ def get_all_event_start_times(G):
         inferred_start_times_before = infer_head_start_time(G, out_paths)
         inferred_start_times_after = infer_tail_start_time(G, in_paths)
 
+        if not (inferred_start_times_before + inferred_start_times_after):
+            print("No path found for node %s, %s, %s"%(node, G.nodes[node].get("type","UNKNOWN"), G.nodes[node].get("text","UNKNOWN")))
+            incomplete = True
+
         start_time = intersect_time_intervals(inferred_start_times_before + inferred_start_times_after)
 
         if start_time:
             in_hospital_course = G.nodes[node].get("hospital_course", None)
             if in_hospital_course and admission_start_time:
                 if start_time[0] == datetime.min and start_time[1] > admission_start_time[0]:
-                    start_time = (admission_start_time[0], start_time[1], admission_start_time[0].strftime("%Y-%m-%d") +" "+ start_time[2].replace('BEFORE', 'TO'), start_time[3])
+                    start_time = (admission_start_time[0], start_time[1], admission_start_time[2], start_time[3], admission_start_time[2] +" "+ start_time[4].replace('BEFORE', 'TO'), start_time[-1])
 
             results.append((node, start_time))
         else:
@@ -628,24 +660,33 @@ def get_print_paths(G, paths, abbr_path=True):
         output_paths.append("".join(formatted_path))
     return output_paths
 
-def format_time_range(start, end):
-    def format_time_stamp(dt):
-        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
-            return dt.strftime('%Y-%m-%d')
-        elif dt.second == 0:
-            return dt.strftime('%Y-%m-%d %H:%M')
-        else:
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
+def format_time_range(start, end, start_val, end_val):
+    # def format_time_stamp(dt):
+    #     if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+    #         return dt.strftime('%Y-%m-%d')
+    #     elif dt.second == 0:
+    #         return dt.strftime('%Y-%m-%d %H:%M')
+    #     else:
+    #         return dt.strftime('%Y-%m-%d %H:%M:%S')
 
-    if end.hour == 23 and end.minute == 59 and end.second == 59:
-        end = datetime(end.year, end.month, end.day)
+    # if end.hour == 23 and end.minute == 59 and end.second == 59:
+    #     end = datetime(end.year, end.month, end.day)
     
+    # 这里修改后直接按val的粒度来格式化
     if start == datetime.min:
-        return "BEFORE %s" % format_time_stamp(end)
+        return "BEFORE %s" % end.strftime(get_time_granularity(end_val))
     elif end == datetime.max:
-        return "AFTER %s" % format_time_stamp(start)
+        return "AFTER %s" % start.strftime(get_time_granularity(start_val))
     else:
-        return "%s TO %s" % (format_time_stamp(start), format_time_stamp(end))
+        start_str = start.strftime(get_time_granularity(start_val))
+        end_str = end.strftime(get_time_granularity(end_val))
+        if start_str == end_str:
+            if 'T' in start_str: # 为了语言流畅性，修改了一下介词
+                return "AT %s" % start_str
+            else:
+                return "ON %s" % start_str
+        else:
+            return "%s TO %s" % (start_str, end_str)
 
 def merge_overlapping_nodes(G):
     
@@ -737,26 +778,32 @@ def process_start_time():
     68.xml, T17, DATE -> FREQUENCY
     256.xml, T5, DATE -> DURATION
     408.xml, T25, P12H -> PT12H
-    Ground truth: None
+    311.xml, T7, T8 -> 1997-04-08T3:38 -> 1997-04-08T03:38
+    28.xml, T7, 2012-05-14T1800-> 2012-05-14T18:00
+    68.xml, T0, 210-08-26 -> 2010-08-26
+    Ground truth: 
+    537.xml, T4, 2014-01-20T4:30 -> 2014-01-20T04:30
+    732.xml, T10, 03:00 -> 2010-08-31T03:00
     """
-    src_foler = "data/i2b2/timeline_training"
+    src_foler = "data/i2b2/timeline_test"
     data = data_loader(src_foler)
     incomplete_files = []
     for fid, filename in enumerate(data):
         print(str(fid), ":", filename)
-        # if os.path.exists(os.path.join(src_foler, "%s.starttime.json"%filename)):
-        #     continue
+        # if filename != '1.xml': continue
+        if fid < 62:
+            continue
         G, text = build_section_graph(filename, data)
         G = preprocess_time_overlap_edges(G)
         results, incomplete = get_all_event_start_times(G)
         if incomplete:
             incomplete_files.append(filename)
         output = []
-        for node, (start, end, time_in_text, paths) in results:
+        for node, (start, end, start_val_text, end_val_text, time_in_text, paths) in results:
             node_data = {}
             node_type = G.nodes[node].get("type", "UNKNOWN")
             node_text = G.nodes[node].get("text", "UNKNOWN")
-            formatted_time_range = format_time_range(start, end)
+            formatted_time_range = format_time_range(start, end, start_val_text, end_val_text)
             formatted_paths = get_print_paths(G, paths, abbr_path=False)
             node_data["node_id"] = node
             node_data["type"] = node_type
@@ -769,7 +816,7 @@ def process_start_time():
         with open(os.path.join(src_foler, "%s.starttime.json"%filename), "w") as f:
             json.dump(output, f, indent=4)
 
-    with open("data/i2b2/incomplete_start_time_train.txt", "w") as f:
+    with open("data/i2b2/incomplete_start_time_test.txt", "w") as f:
         f.write("\n".join(incomplete_files))
 
 def process_interval_paths():
@@ -783,8 +830,8 @@ def process_interval_paths():
         results, incomplete = get_all_event_start_times(G)
         interval_to_nodes = defaultdict(list)
         output = []
-        for node_id, (start, end, time_in_text, paths) in results:
-            time_range = format_time_range(start, end)
+        for node_id, (start, end, start_val_text, end_val_text, time_in_text, paths) in results:
+            time_range = format_time_range(start, end, start_val_text, end_val_text)
             interval_to_nodes[time_range].append(node_id)
         
         for time_range, nodes in interval_to_nodes.items():
