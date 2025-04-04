@@ -185,7 +185,7 @@ def check_results(src_folder, valid_types = ['PROBLEM', 'TEST', 'TREATMENT']):
         
 
 
-def insert_event_labels(src_folder, valid_types = ['PROBLEM', 'TEST', 'TREATMENT', 'TIME', 'DATE']):
+def insert_event_labels(src_folder, valid_types = ['PROBLEM', 'TEST', 'TREATMENT', 'TIME', 'DATE'], file_suffix = 'label.txt'):
     """遍历xml文档, 为每个文档插入事件标签，保存到文件*.xml.label.txt中"""
     data = data_loader(src_folder)
     for filename in data:
@@ -196,11 +196,14 @@ def insert_event_labels(src_folder, valid_types = ['PROBLEM', 'TEST', 'TREATMENT
         events = [event for event in events if event['type'].upper() in valid_types]
         events = [{'id': event['id'], 'label': event['type'], 'start': int(event['start']), 'end': int(event['end']), 'text':event['text']} for event in events]
         modified_text = process_text_labels(text, events)
-        with open(f"{src_folder}/{filename}.label.txt", "w") as f:
+        with open(f"{src_folder}/{filename}.{file_suffix}", "w") as f:
             f.write(modified_text)
        
 
 
 if __name__ == '__main__':
-    insert_event_labels("./data/i2b2/timeline_test/")
+    # insert_event_labels("./data/i2b2/timeline_test/")
+    # /home/jovyan/work/Temporal_relation/data/
+    insert_event_labels("/home/jovyan/work/Temporal_relation/data/timeline_test/", ['PROBLEM', 'TEST', 'TREATMENT'], 'notime.label.txt')
+    insert_event_labels("/home/jovyan/work/Temporal_relation/data/timeline_training/", ['PROBLEM', 'TEST', 'TREATMENT'], 'notime.label.txt')
     # check_results("./data/i2b2/original_training/")
