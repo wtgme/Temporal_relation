@@ -681,6 +681,7 @@ def format_time_range(start, end, start_val, end_val):
         start_str = start.strftime(get_time_granularity(start_val))
         end_str = end.strftime(get_time_granularity(end_val))
         if start_str == end_str:
+ 
             if 'T' in start_str: # 为了语言流畅性，修改了一下介词
                 return "AT %s" % start_str
             elif get_time_granularity(start_val) == "%Y-%m-%d":
@@ -793,8 +794,7 @@ def process_start_time():
     for fid, filename in enumerate(data):
         print(str(fid), ":", filename)
         # if filename != '1.xml': continue
-        if fid < 62:
-            continue
+
         G, text = build_section_graph(filename, data)
         G = preprocess_time_overlap_edges(G)
         results, incomplete = get_all_event_start_times(G)
