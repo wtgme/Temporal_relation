@@ -6,6 +6,9 @@ import json, os, datetime
 def data_load(src_folder: str):
     # Get all .xml.label.txt and other files in the source folder
     label_files = [f for f in os.listdir(src_folder) if f.endswith('.xml.notime.label.txt')]
+    
+    # Sort the files to ensure consistent ordering across runs
+    label_files.sort()
 
     # Dictionary to store the organized data by file ID
     organized_data = {}
@@ -88,7 +91,7 @@ class timeline(BaseModel):
 json_schema = timeline.model_json_schema()
 
 
-def evaluate_temporal_inference(text, events):
+def temporal_inference(text, events):
     """Evaluate the model's ability to infer time for specific events"""
     results = []
     
@@ -177,7 +180,7 @@ if __name__ == "__main__":
             print(f"Processing {key} ({processed_count+1}/{total_files})...")
             text = train_data[key]['label']
             start_time = train_data[key]['starttime']
-            inference = evaluate_temporal_inference(text, start_time)
+            inference = temporal_inference(text, start_time)
             results[key] = inference
             processed_count += 1
             
@@ -192,7 +195,8 @@ if __name__ == "__main__":
             save_intermediate_results(results)
 
     # Save the final results to a JSON file
-    output_file = '/home/jovyan/work/Temporal_relation/data/timeline_training_QwQ-32B-AWQ_results.json'
+    output_file = '/home/jovyan/work/Temporal_relation/data/timeline_training_QwQ-32B-AWQ_results_nontime.json'
+    # output_file = '/home/jovyan/work/Temporal_relation/data/timeline_training_QwQ-32B-AWQ_results.json'
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=4)
     print(f"Completed! Final results saved to {output_file}")
