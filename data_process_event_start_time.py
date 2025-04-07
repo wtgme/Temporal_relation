@@ -683,8 +683,10 @@ def format_time_range(start, end, start_val, end_val):
         if start_str == end_str:
             if 'T' in start_str: # 为了语言流畅性，修改了一下介词
                 return "AT %s" % start_str
-            else:
+            elif get_time_granularity(start_val) == "%Y-%m-%d":
                 return "ON %s" % start_str
+            else:
+                return "IN %s" % start_str
         else:
             return "%s TO %s" % (start_str, end_str)
 
