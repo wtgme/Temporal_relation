@@ -12,6 +12,8 @@ def data_load(src_folder: str, use_time_tags=False):
     # Get all .xml.label.txt files with appropriate suffix based on using time tags or not
     suffix = '.xml.label.txt' if use_time_tags else '.xml.notime.label.txt'
     label_files = [f for f in os.listdir(src_folder) if f.endswith(suffix)]
+    label_files = sorted(label_files)  # Sort files to maintain consistent ordering
+    print(label_files)
     
     # Create ordered dictionary to maintain consistent ordering
     organized_data = OrderedDict()
@@ -48,6 +50,7 @@ def data_load(src_folder: str, use_time_tags=False):
             organized_data[file_id]['interval_paths'] = None
 
     print(f"Loaded data for {len(organized_data)} IDs.")
+    # print(list(organized_data.keys())[:10])
     return organized_data
 
 

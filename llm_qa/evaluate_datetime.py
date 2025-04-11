@@ -24,7 +24,7 @@ def extract_datetime_annotations(results):
                 # "clues": inference.get("clues", "")
             })
         datetime_annotations[record_id] = annotations
-            
+    print(list(datetime_annotations.keys()))  
     return datetime_annotations
 
 
@@ -170,15 +170,15 @@ def main(file):
 
 if __name__ == "__main__":
     print(datetime.min, datetime.max)
-    
-    files = ['/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_nontime_individual_events.json',
-             '/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_time_individual_events.json',
-             '/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_nontime_individual_events_sections.json',
+    path = '/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/'
+    files = ['timeline_training_QwQ-32B-AWQ_results_nontime_individual_events.json',
+             'timeline_training_QwQ-32B-AWQ_results_time_individual_events.json',
+             'timeline_training_QwQ-32B-AWQ_results_nontime_individual_events_sections.json',
             #  '/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_nontime_all_events.json'
              ]
     for file in files:
-        print(f"\n\nProcessing file: {file}")
-        main(file)
+        print(f"\n\nProcessing file: {path + file}")
+        main(path + file)
 # Errors 
 # {'event_id': 'E34', 'ground_truth': '1998-05-09 TO 1998-05-25', 'inference': 'AFTER ON 1998-05-10'}
 # {'event_id': 'E44', 'ground_truth': 'AT 2011-09-24T14:00', 'inference': 'ON 2011-09-24'}
