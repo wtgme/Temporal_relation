@@ -24,31 +24,66 @@ def extract_datetime_annotations(results):
                 # "clues": inference.get("clues", "")
             })
         datetime_annotations[record_id] = annotations
-    print(list(datetime_annotations.keys()))  
+    # print(list(datetime_annotations.keys()))  
     return datetime_annotations
 
 
 def parse_datetime(date_str):
+    # print(date_str)
+    """Parse a date string into a datetime object, handling various formats."""
+    # Handle various date formats and normalize them
+    
+    # Replace placeholder characters
     if "-??" in date_str:
         date_str = date_str.replace("-??", "-01")
+        
     # Handle '00' day or month
     if "-00" in date_str:
         date_str = date_str.replace("-00", "-01")
+        
+    # Remove time component if present
     if "T" in date_str:
         date_str = date_str.split('T')[0]
+        
+    # Handle prefixes like "ON", "BEFORE", etc.
     if ' ' in date_str:
         date_str = date_str.split(' ')[0]
+    if ',' in date_str:
+        date_str = date_str.split(',')[0]
+
+    # Handle MM/DD/YYYY format (like 08/15/1998)
+    if '/' in date_str:
+        parts = date_str.split('/')
+        if len(parts) == 3:
+            # Convert MM/DD/YYYY to YYYY-MM-DD
+            month, day, year = parts
+            date_str = f"{year}-{month}-{day}"
     
+    # Handle MM-DD-YY format (like 09-07-93)
+    if len(date_str.split('-')) == 3:
+        parts = date_str.split('-')
+        # Only transform if first part is not a 4-digit year (YYYY-MM-DD)
+        if len(parts[0]) != 4 and len(parts[2]) == 2:  # MM-DD-YY format
+            # Convert to YYYY-MM-DD format (assuming 19xx for years before 50, 20xx for years after)
+            year = int(parts[2])
+            year_prefix = '19' if year >= 50 else '20'
+            date_str = f"{year_prefix}{parts[2]}-{parts[0]}-{parts[1]}"
+    
+    # Now parse based on dash count
     if '-' not in date_str:
+        # Year only
         date_str = f"{date_str}-01-01"
         date = datetime.strptime(date_str, '%Y-%m-%d')
-    elif len(date_str.split('-')) == 2:  # Format is YYYY-MM
-        # Add day 01 to the month to get the first day of the month
+    elif len(date_str.split('-')) == 2:  
+        # Format is YYYY-MM
         date_str = f"{date_str}-01"
         date = datetime.strptime(date_str, '%Y-%m-%d')
-    elif len(date_str.split('-')) == 3:  # Format is YYYY-MM-DD
+    elif len(date_str.split('-')) == 3:  
+        # Format is YYYY-MM-DD
         date = datetime.strptime(date_str, '%Y-%m-%d')
+    # print('-->', date)
     return date
+
 
 
 # Helper function to convert labels to intervals
@@ -171,9 +206,11 @@ def main(file):
 if __name__ == "__main__":
     print(datetime.min, datetime.max)
     path = '/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/'
-    files = ['timeline_training_QwQ-32B-AWQ_results_nontime_individual_events.json',
-             'timeline_training_QwQ-32B-AWQ_results_time_individual_events.json',
-             'timeline_training_QwQ-32B-AWQ_results_nontime_individual_events_sections.json',
+    files = [
+            'timeline_training_QwQ-32B-AWQ_results_notime_individual.json',
+             'timeline_training_QwQ-32B-AWQ_results_notime_individual_sections.json',
+             'timeline_training_QwQ-32B-AWQ_results_time_individual.json', 
+             'timeline_training_QwQ-32B-AWQ_results_time_individual_sections.json'
             #  '/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_nontime_all_events.json'
              ]
     for file in files:
