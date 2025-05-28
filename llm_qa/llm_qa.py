@@ -236,7 +236,7 @@ def main():
                         help="Directory to save the results")
     parser.add_argument("--intermediate_dir", default=path + "llm_qa/intermediate_results/", 
                         help="Directory to save intermediate results")
-    parser.add_argument("--limit", type=int, default=50, 
+    parser.add_argument("--limit", type=int, default=500000, 
                         help="Limit the number of files to process")
     parser.add_argument("--api_base", default="http://localhost:8000/v1", 
                         help="Base URL for the API")

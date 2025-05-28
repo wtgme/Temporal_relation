@@ -117,7 +117,7 @@ def intervals_overlap(gt_interval, pred_interval):
         return False
     label_gt, start_gt, end_gt = gt_interval
     label_pred, start_pred, end_pred = pred_interval
-    return max(start_gt, start_pred) <= min(end_gt, end_pred)
+    return (label_gt==label_pred) & (max(start_gt, start_pred) <= min(end_gt, end_pred))
 
 
 def main(file):
@@ -207,11 +207,11 @@ if __name__ == "__main__":
     print(datetime.min, datetime.max)
     path = '/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/'
     files = [
+            #  'timeline_training_QwQ-32B-AWQ_results_notime_all.json',
             'timeline_training_QwQ-32B-AWQ_results_notime_individual.json',
              'timeline_training_QwQ-32B-AWQ_results_notime_individual_sections.json',
              'timeline_training_QwQ-32B-AWQ_results_time_individual.json', 
              'timeline_training_QwQ-32B-AWQ_results_time_individual_sections.json'
-            #  '/home/ubuntu/work/Temporal_relation/data/qa_results/timeline_training_QwQ-32B-AWQ_results_nontime_all_events.json'
              ]
     for file in files:
         print(f"\n\nProcessing file: {path + file}")
