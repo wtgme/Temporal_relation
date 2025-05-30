@@ -1,10 +1,10 @@
-# LLM Temporal Relation Evaluation
+# LLM Temporal Relation Data Builder
 
-This directory contains scripts for evaluating the performance of Large Language Models (LLMs) in inferring temporal relations from clinical text.
+This directory contains scripts for building training and evaluation datasets for Large Language Models (LLMs) to learn temporal relation inference from clinical text. The output is formatted as Azure OpenAI Bulk JSONL for batch processing.
 
-## Main Script: `llm_qa.py`
+## Main Script: `llm_qa_data_builder.py`
 
-The main script `llm_qa.py` is a consolidated script that supports different evaluation modes:
+The main script `llm_qa_data_builder.py` builds datasets in Azure OpenAI Bulk JSONL format that support different training configurations:
 
 - Processing events individually or all at once
 - Including or excluding time tags in the text
@@ -13,7 +13,7 @@ The main script `llm_qa.py` is a consolidated script that supports different eva
 ### Usage
 
 ```bash
-python llm_qa.py [options]
+python llm_qa_data_builder.py [options]
 ```
 
 #### Options
@@ -30,44 +30,44 @@ python llm_qa.py [options]
 
 #### Examples
 
-Process individual events without time tags:
+Build individual event datasets without time tags:
 ```bash
-python llm_qa.py --mode individual
+python llm_qa_data_builder.py --mode individual
 ```
 
-Process individual events with time tags:
+Build individual event datasets with time tags:
 ```bash
-python llm_qa.py --mode individual --time_tags
+python llm_qa_data_builder.py --mode individual --time_tags
 ```
 
-Process individual events with section context:
+Build individual event datasets with section context:
 ```bash
-python llm_qa.py --mode individual --section_context
+python llm_qa_data_builder.py --mode individual --section_context
 ```
 
-Process individual events with time tags and section context:
+Build individual event datasets with time tags and section context:
 ```bash
-python llm_qa.py --mode individual --time_tags --section_context
+python llm_qa_data_builder.py --mode individual --time_tags --section_context
 ```
 
-Process all events at once:
+Build all-events datasets:
 ```bash
-python llm_qa.py --mode all
+python llm_qa_data_builder.py --mode all
 ```
 
-Process all events with time tags:
+Build all-events datasets with time tags:
 ```bash
-python llm_qa.py --mode all --time_tags
+python llm_qa_data_builder.py --mode all --time_tags
 ```
 
-Process all events with section context:
+Build all-events datasets with section context:
 ```bash
-python llm_qa.py --mode all --section_context
+python llm_qa_data_builder.py --mode all --section_context
 ```
 
-Process all events with time tags and section context:
+Build all-events datasets with time tags and section context:
 ```bash
-python llm_qa.py --mode all --time_tags --section_context
+python llm_qa_data_builder.py --mode all --time_tags --section_context
 ```
 
 ## Input Data
@@ -92,7 +92,13 @@ The `prompts.json` file contains all the prompts used for different evaluation m
 
 ## Output
 
-The script saves results as JSON files in the specified output directory. The filename includes information about the evaluation parameters:
+The script generates Azure OpenAI Bulk JSONL files in the specified output directory. Each line in the JSONL file contains a training/evaluation example with:
+- `custom_id`: Unique identifier for the example
+- `method`: "POST" 
+- `url`: "/v1/chat/completions"
+- `body`: Contains the messages array with system prompt, user prompt, and expected assistant response
+
+The filename includes information about the dataset configuration:
 - Model name
 - Whether time tags were used
 - Whether events were processed individually or all at once
@@ -100,6 +106,8 @@ The script saves results as JSON files in the specified output directory. The fi
 
 ## Notes
 
-- When using the `all` mode, the text is not preprocessed (all event tags remain intact).
-- When using the `individual` mode, the text is preprocessed to keep only the current event's tags.
-- Intermediate results are automatically saved during processing to prevent data loss.
+- The generated JSONL files are compatible with Azure OpenAI batch processing API
+- When using the `all` mode, the text is not preprocessed (all event tags remain intact)
+- When using the `individual` mode, the text is preprocessed to keep only the current event's tags
+- Intermediate results are automatically saved during processing to prevent data loss
+- Each JSONL entry represents a complete training example with input prompt and expected temporal relation output

@@ -2,12 +2,36 @@
 import json
 from datetime import datetime, timedelta
 import pandas as pd
+import llm_qa_data_builder
 # import ace_tools as tools
 
 def load_results(filepath):
-    """Load the JSON results file containing LLM datetime annotations."""
+    """Load the JSON results file containing LLM datetime annotations. 
+    this was for vllm results"""
     with open(filepath, 'r') as f:
         return json.load(f)
+
+
+def get_gold_standard():
+    path = '/home/ubuntu/work/Temporal_relation/'
+    data_dir = path + "data/timeline_training/"
+    results = {}
+
+    data = llm_qa_data_builder.data_load(data_dir, True)
+
+    for key in data:
+        ground_truth = []
+        text = data[key]['label']
+        event_start_time = data[key]['starttime']
+        for event in event_start_time:
+            ground_truth.append({
+                "node_id": event['node_id'],
+                "formatted_time_range": event['formatted_time_range'],
+            })
+        # print(ground_truth)
+        results[key] = {'ground_truth': ground_truth}
+    return results
+
 
 def extract_datetime_annotations(results):
     """Extract all datetime annotations from the results."""
