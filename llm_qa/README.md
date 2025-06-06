@@ -4,7 +4,7 @@ This directory contains scripts for building training and evaluation datasets fo
 
 ## Main Script: `llm_qa_data_builder.py`
 
-The main script `llm_qa_data_builder.py` builds datasets in Azure OpenAI Bulk JSONL format that support different training configurations:
+The main script `llm_qa_data_builder.py` automatically builds datasets in Azure OpenAI Bulk JSONL format for all possible configurations:
 
 - Processing events individually or all at once
 - Including or excluding time tags in the text
@@ -13,73 +13,53 @@ The main script `llm_qa_data_builder.py` builds datasets in Azure OpenAI Bulk JS
 ### Usage
 
 ```bash
-python llm_qa_data_builder.py [options]
+python llm_qa_data_builder.py
 ```
 
-#### Options
+The script will automatically process all 8 possible configurations:
 
-- `--mode`: Choose between `individual` (process each event separately) or `all` (process all events at once). Default: `individual`
-- `--time_tags`: Include this flag to use input files with time tags. Default: False (uses files without time tags)
-- `--section_context`: Include this flag to add section context information to the prompt. Default: False
-- `--data_dir`: Directory containing the data files. Default: `/home/ubuntu/work/Temporal_relation/data/timeline_training/`
-- `--output_dir`: Directory to save the results. Default: `/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/`
-- `--intermediate_dir`: Directory to save intermediate results. Default: `/home/ubuntu/work/Temporal_relation/llm_qa/intermediate_results/`
-- `--limit`: Limit the number of files to process. Default: 50
-- `--api_base`: Base URL for the API. Default: `http://host.docker.internal:8000/v1`
-- `--model`: Model name to use. Default: `Qwen/QwQ-32B-AWQ`
+1. Individual events without time tags
+2. Individual events with time tags
+3. Individual events without time tags but with section context
+4. Individual events with time tags and section context
+5. All events at once without time tags
+6. All events at once with time tags
+7. All events at once without time tags but with section context
+8. All events at once with time tags and section context
 
-#### Examples
+### Configuration Details
 
-Build individual event datasets without time tags:
-```bash
-python llm_qa_data_builder.py --mode individual
-```
+The script processes the following combinations automatically:
 
-Build individual event datasets with time tags:
-```bash
-python llm_qa_data_builder.py --mode individual --time_tags
-```
+- **Individual mode without time tags**: `--mode individual`
+- **Individual mode with time tags**: `--mode individual --time_tags`
+- **Individual mode with section context**: `--mode individual --section_context`
+- **Individual mode with time tags and section context**: `--mode individual --time_tags --section_context`
+- **All mode without time tags**: `--mode all`
+- **All mode with time tags**: `--mode all --time_tags`
+- **All mode with section context**: `--mode all --section_context`
+- **All mode with time tags and section context**: `--mode all --time_tags --section_context`
 
-Build individual event datasets with section context:
-```bash
-python llm_qa_data_builder.py --mode individual --section_context
-```
+### Default Settings
 
-Build individual event datasets with time tags and section context:
-```bash
-python llm_qa_data_builder.py --mode individual --time_tags --section_context
-```
+- **Data directory**: `/home/ubuntu/work/Temporal_relation/data/timeline_training/`
+- **Output directory**: `/home/ubuntu/work/Temporal_relation/llm_qa/qa_data/`
+- **File limit**: 50,000,000 (essentially unlimited)
+- **Model**: `openai`
 
-Build all-events datasets:
-```bash
-python llm_qa_data_builder.py --mode all
-```
-
-Build all-events datasets with time tags:
-```bash
-python llm_qa_data_builder.py --mode all --time_tags
-```
-
-Build all-events datasets with section context:
-```bash
-python llm_qa_data_builder.py --mode all --section_context
-```
-
-Build all-events datasets with time tags and section context:
-```bash
-python llm_qa_data_builder.py --mode all --time_tags --section_context
-```
+To modify these settings, edit the `common_args` dictionary in the `main()` function.
 
 ## Input Data
 
-The input data directory (`data_dir`) must contain the following files for each document:
-- `<file_id>.xml.label.txt`: The clinical text with event tags.
-- `<file_id>.xml.starttime.json`: A JSON file containing the start time information for the document.
-- `<file_id>.xml.interval_paths.json`: A JSON file containing interval path information (optional).
+The input data directory must contain the following files for each document:
+- `<file_id>.xml.label.txt`: The clinical text with event tags (used when time_tags=False)
+- `<file_id>.xml.notime.label.txt`: The clinical text without time tags (used when time_tags=True)
+- `<file_id>.xml.starttime.json`: A JSON file containing the start time information for the document
+- `<file_id>.xml.interval_paths.json`: A JSON file containing interval path information (optional)
 
 ## Prompts File: `prompts.json`
 
-The `prompts.json` file contains all the prompts used for different evaluation modes. The file must be located in the same directory as the script. The script automatically selects the appropriate prompt based on the provided command line arguments:
+The `prompts.json` file contains all the prompts used for different evaluation modes. The file must be located in the same directory as the script. The script automatically selects the appropriate prompt based on the configuration:
 
 - `individual_notime`: For processing individual events without time tags
 - `individual_time`: For processing individual events with time tags
@@ -92,22 +72,33 @@ The `prompts.json` file contains all the prompts used for different evaluation m
 
 ## Output
 
-The script generates Azure OpenAI Bulk JSONL files in the specified output directory. Each line in the JSONL file contains a training/evaluation example with:
+The script generates 8 Azure OpenAI Bulk JSONL files in the output directory, one for each configuration. Each line in the JSONL file contains a training/evaluation example with:
 - `custom_id`: Unique identifier for the example
 - `method`: "POST" 
-- `url`: "/v1/chat/completions"
-- `body`: Contains the messages array with system prompt, user prompt, and expected assistant response
+- `url`: "/chat/completions"
+- `body`: Contains the messages array with system prompt and user prompt
 
-The filename includes information about the dataset configuration:
+The filenames include information about the dataset configuration:
 - Model name
-- Whether time tags were used
-- Whether events were processed individually or all at once
-- Whether section context was used
+- Whether time tags were used (`time` or `notime`)
+- Whether events were processed individually or all at once (`individual` or `all`)
+- Whether section context was used (`_sections` suffix)
+
+Example output files:
+- `timeline_azure_bulk_openai_notime_individual.jsonl`
+- `timeline_azure_bulk_openai_time_individual.jsonl`
+- `timeline_azure_bulk_openai_notime_individual_sections.jsonl`
+- `timeline_azure_bulk_openai_time_individual_sections.jsonl`
+- `timeline_azure_bulk_openai_notime_all.jsonl`
+- `timeline_azure_bulk_openai_time_all.jsonl`
+- `timeline_azure_bulk_openai_notime_all_sections.jsonl`
+- `timeline_azure_bulk_openai_time_all_sections.jsonl`
 
 ## Notes
 
-- The generated JSONL files are compatible with Azure OpenAI batch processing API
+- The script automatically processes all 8 configurations in sequence
+- Each configuration is processed independently with its own progress tracking
+- If one configuration fails, the script continues with the remaining configurations
 - When using the `all` mode, the text is not preprocessed (all event tags remain intact)
 - When using the `individual` mode, the text is preprocessed to keep only the current event's tags
-- Intermediate results are automatically saved during processing to prevent data loss
-- Each JSONL entry represents a complete training example with input prompt and expected temporal relation output
+- Each JSONL entry represents a complete training example with input prompt for temporal relation inference

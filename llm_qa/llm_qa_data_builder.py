@@ -111,7 +111,7 @@ def load_prompts():
         raise ValueError(f"Error parsing JSON in prompts file at {prompt_file}")
 
 
-def temporal_inference_individual(text, doc_id, events, client, model_name, json_schema, prompt_key="individual_notime"):
+def temporal_data_individual(text, doc_id, events, model="gpt-4o", prompt_key="individual_notime"):
     """Evaluate the model's ability to infer time for specific events individually"""
     results = []
     prompts = load_prompts()
@@ -121,7 +121,6 @@ def temporal_inference_individual(text, doc_id, events, client, model_name, json
     
     for event in events:
         eid = event['node_id']
-        ground_truth_range = event['formatted_time_range']
         
         # Process text to keep only the current event's tags
         processed_text = preprocess_text(text, eid)
@@ -133,186 +132,77 @@ def temporal_inference_individual(text, doc_id, events, client, model_name, json
         prompt_template = prompts[prompt_key]
         event_prompt = prompt_template.replace("{eid}", eid)
 
-        # print(event_prompt + "\n\nCLINICAL TEXT: " + processed_text)
-
-        results.append({"custom_id": "doc-" + str(doc_id) + "-task-"+eid, "method": "POST", "url": "/chat/completions", 
-                    "body": {"model": "gpt-4o", 
-                    "messages": [{"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."}, 
-                                 {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + processed_text}]}})
-
-        # try:
-        #     chat_response = client.chat.completions.create(
-        #         model=model_name,
-        #         messages=[
-        #             {"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."},
-        #             {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + processed_text},
-        #         ],
-        #         extra_body={"guided_json": json_schema},
-        #     )
-            
-        #     reasoning_content = chat_response.choices[0].message.reasoning_content
-        #     content = chat_response.choices[0].message.content
-
-        #     print(f"Event ID: {eid}")
-        #     print(event_prompt + "\n\nCLINICAL TEXT: " + processed_text)
-        #     print("reasoning_content:", reasoning_content)
-        #     print("content:", content)
-
-        #     result = {
-        #         "event_id": eid,
-        #         "ground_truth": ground_truth_range,
-        #         "llm_reasoning": reasoning_content,
-        #         "llm_inference": content
-        #     }
-        #     results.append(result)
-        #     print("-" * 80)
-        
-        # except Exception as e:
-        #     print(f"Error during inference for event {eid}: {str(e)}")
-        #     result = {
-        #         "event_id": eid,
-        #         "ground_truth": ground_truth_range,
-        #         "llm_reasoning": None,
-        #         "llm_inference": None,
-        #         "error": str(e)
-        #     }
-        #     results.append(result)
+        results.append({
+            "custom_id": "doc-" + str(doc_id) + "-task-" + eid, 
+            "method": "POST", 
+            "url": "/chat/completions", 
+            "body": {
+                "model": model, 
+                "messages": [
+                    {"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."}, 
+                    {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + processed_text}
+                ]
+            }
+        })
     
     return results
 
 
-def temporal_inference_all(text, doc_id, events, client, model_name, json_schema, prompt_key="all_notime"):
+def temporal_data_all(text, doc_id, model="gpt-4o", prompt_key="all_notime"):
     """Evaluate the model's ability to infer time for all events at once"""
     prompts = load_prompts()
     results = []
+    
     if prompt_key not in prompts:
         raise ValueError(f"Prompt key '{prompt_key}' not found in prompts file")
     
     event_prompt = prompts[prompt_key]
-
     
     if 'notime' in prompt_key:
         # If the prompt is for "notime", remove all time tags from the text
         text = remove_time_tags(text)
-    print(event_prompt + "\n\nCLINICAL TEXT: " + text)
+    
+    # print(event_prompt + "\n\nCLINICAL TEXT: " + text)
 
-    results.append({"custom_id": "doc-" + str(doc_id), "method": "POST", "url": "/chat/completions", 
-                    "body": {"model": "gpt-4o", 
-                    "messages": [{"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."}, 
-                                 {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + text}]}})
-
-    # # No preprocessing needed for "all" mode - use text as is
-    # try:
-    #     # For "all" mode, use guided_json since we expect a list of objects
-    #     chat_response = client.chat.completions.create(
-    #         model=model_name,
-    #         messages=[
-    #             {"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."},
-    #             {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + text},
-    #         ],
-    #         extra_body={"guided_json": json_schema},
-    #     )
-
-    #     ground_truth = []
-    #     for event in events:
-    #         ground_truth.append({
-    #             "node_id": event['node_id'],
-    #             "formatted_time_range": event['formatted_time_range'],
-    #         })
-        
-
-    #     # Extract reasoning and inference content
-    #     reasoning_content = chat_response.choices[0].message.reasoning_content
-    #     content = chat_response.choices[0].message.content
-
-    #     print(event_prompt + "\n\nCLINICAL TEXT: " + text)
-    #     print("reasoning_content:", reasoning_content)
-    #     print("content:", content)
-
-    #     results = {
-    #         "ground_truth": ground_truth,
-    #         "llm_reasoning": reasoning_content,
-    #         "llm_inference": content
-    #     }
-    # except Exception as e:
-    #     print(f"Error during inference for all events: {str(e)}")
-    #     results = {
-    #         "ground_truth": [{"node_id": event['node_id'], "formatted_time_range": event['formatted_time_range']} for event in events],
-    #         "llm_reasoning": None,
-    #         "llm_inference": None,
-    #         "error": str(e)
-    #     }
+    results.append({
+        "custom_id": "doc-" + str(doc_id), 
+        "method": "POST", 
+        "url": "/chat/completions", 
+        "body": {
+            "model": model, 
+            "messages": [
+                {"role": "system", "content": "You are a medical assistant with expertise in understanding clinical timelines and temporal relationships between medical events."}, 
+                {"role": "user", "content": event_prompt + "\n\nCLINICAL TEXT: " + text}
+            ]
+        }
+    })
     
     return results
 
 
-def main():
-    path = '/home/ubuntu/work/Temporal_relation/'
-
-    parser = argparse.ArgumentParser(description="LLM evaluation for temporal relations in clinical text")
-
-    parser.add_argument("--mode", choices=["individual", "all"], default="individual", 
-                        help="Process events individually or all at once")
-    parser.add_argument("--time_tags", action="store_true", 
-                        help="Whether to include time tags in the text")
-    parser.add_argument("--section_context", action="store_true", 
-                        help="Whether to include section context information in the prompt")
-    parser.add_argument("--data_dir", default=path + "data/timeline_training/", 
-                        help="Directory containing the data files")
-    parser.add_argument("--output_dir", default=path + "llm_qa/qa_data", 
-                        help="Directory to save the results")
-    parser.add_argument("--intermediate_dir", default=path + "llm_qa/intermediate_results/", 
-                        help="Directory to save intermediate results")
-    parser.add_argument("--limit", type=int, default=50000000, 
-                        help="Limit the number of files to process")
-    parser.add_argument("--api_base", default="http://localhost:8000/v1", 
-                        help="Base URL for the API")
-    parser.add_argument("--model", default="openai", 
-                        help="Model name to use")
-    args = parser.parse_args()
-
+def process_configuration(mode, time_tags, section_context, data_dir, output_dir, limit, model):
+    """Process a single configuration combination"""
+    print(f"\n{'='*80}")
+    print(f"Processing configuration: mode={mode}, time_tags={time_tags}, section_context={section_context}")
+    print(f"{'='*80}")
+    
     # Determine which prompt to use based on the arguments
-    prompt_key = f"{'individual' if args.mode == 'individual' else 'all'}_{'time' if args.time_tags else 'notime'}"
-    if args.section_context:
+    prompt_key = f"{'individual' if mode == 'individual' else 'all'}_{'time' if time_tags else 'notime'}"
+    if section_context:
         prompt_key += "_section"
 
-    # Configure the API client
-    client = OpenAI(
-        api_key="EMPTY",
-        base_url=args.api_base,
-    )
-
-    # Define the schema for the response based on mode
-    if args.mode == "individual":
-        class Timeline(BaseModel):
-            datetime: str
-            clues: str
-        json_schema = Timeline.model_json_schema()
-    else:
-        # For "all" mode, define a schema for a list of objects
-        class TimelineEvent(BaseModel):
-            event_id: str
-            datetime: str
-            clues: str
-        
-        class TimelineEvents(BaseModel):
-            events: List[TimelineEvent]
-        
-        json_schema = TimelineEvents.model_json_schema()
-
     # Load the data
-    data = data_load(args.data_dir, use_time_tags=args.time_tags)
+    data = data_load(data_dir, use_time_tags=time_tags)
     
     if not data:
-        print("No data found in the specified directory. Exiting.")
+        print("No data found in the specified directory. Skipping this configuration.")
         return
 
     results = []
-    save_interval = 5
     processed_count = 0
 
     # Get the total number of files for progress tracking and limit if specified
-    keys_to_process = list(data.keys())[:args.limit] if args.limit > 0 else list(data.keys())
+    keys_to_process = list(data.keys())[:limit] if limit > 0 else list(data.keys())
     total_files = len(keys_to_process)
     print(f"Starting evaluation of {total_files} files...")
 
@@ -322,34 +212,32 @@ def main():
             text = data[key]['label']
             start_time = data[key]['starttime']
 
-            
             if start_time is None or not start_time:
                 print(f"Warning: No starttime data for {key}, skipping...")
                 processed_count += 1
                 continue
             
             # Call the appropriate inference function based on mode
-            if args.mode == "individual":
-                inference = temporal_inference_individual(text, key, start_time, client, args.model, json_schema, prompt_key)
+            if mode == "individual":
+                inference = temporal_data_individual(text, key, start_time, model, prompt_key)
             else:
-                inference = temporal_inference_all(text, key, start_time, client, args.model, json_schema, prompt_key)
+                inference = temporal_data_all(text, key, model, prompt_key)
             
             results.extend(inference)
             processed_count += 1
 
-        
         except Exception as e:
             print(f"Error processing {key}: {str(e)}")
-    
+            processed_count += 1
 
     # Generate output filename based on parameters
-    time_part = "time" if args.time_tags else "notime"
-    mode_part = "individual" if args.mode == "individual" else "all"
-    section_part = "_sections" if args.section_context else ""
-    model_short = args.model.split("/")[-1]
+    time_part = "time" if time_tags else "notime"
+    mode_part = "individual" if mode == "individual" else "all"
+    section_part = "_sections" if section_context else ""
+    model_short = model.split("/")[-1]
     
     output_file = os.path.join(
-        args.output_dir, 
+        output_dir, 
         f"timeline_azure_bulk_{model_short}_{time_part}_{mode_part}{section_part}.jsonl"
     )
     
@@ -360,10 +248,51 @@ def main():
     with open(output_file, 'w') as f:
         for result in results:
             f.write(json.dumps(result) + '\n')
-    print(f"Completed! Final results saved to {output_file}")
+    print(f"Configuration completed! Results saved to {output_file}")
+
+
+def main():
+    # Define base path and default arguments
+    path = '/home/ubuntu/work/Temporal_relation/'
+    
+    # Define all argument combinations to process
+    configurations = [
+        # Individual mode combinations
+        {"mode": "individual", "time_tags": False, "section_context": False},
+        {"mode": "individual", "time_tags": True, "section_context": False},
+        {"mode": "individual", "time_tags": False, "section_context": True},
+        {"mode": "individual", "time_tags": True, "section_context": True},
+        # All mode combinations
+        {"mode": "all", "time_tags": False, "section_context": False},
+        {"mode": "all", "time_tags": True, "section_context": False},
+        {"mode": "all", "time_tags": False, "section_context": True},
+        {"mode": "all", "time_tags": True, "section_context": True},
+    ]
+    
+    # Define common arguments
+    common_args = {
+        "data_dir": path + "data/timeline_training/",
+        "output_dir": path + "llm_qa/qa_data",
+        "limit": 50000000,
+        "model": "gpt-4o-mini"  # Default model, can be overridden in configurations
+    }
+    
+    print(f"Starting processing of {len(configurations)} different configurations...")
+    
+    # Process each configuration
+    for i, config in enumerate(configurations, 1):
+        print(f"\n--- Configuration {i}/{len(configurations)} ---")
+        try:
+            process_configuration(**config, **common_args)
+        except Exception as e:
+            print(f"Error processing configuration {config}: {str(e)}")
+            continue
+    
+    print(f"\n{'='*80}")
+    print("All configurations completed!")
+    print(f"{'='*80}")
 
 
 if __name__ == "__main__":
     main()
-
-    # python llm_qa_data_builder.py --mode individual
+    # Run: python llm_qa_data_builder.py
