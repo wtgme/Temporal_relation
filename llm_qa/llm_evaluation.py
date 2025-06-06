@@ -544,7 +544,7 @@ if __name__ == "__main__":
     # evaluate_azure_annotations(annotations_all, gold_standard)
     # evaluate_azure_annotations(annotations_ind, gold_standard)
 
-
+    # NEED TO UPDATE THE PATHS BELOW
     for i in range(1, 9):
         path = "/home/ubuntu/work/Temporal_relation/llm_qa/GPT4/" + 'file' + str(i) + '/'
         directory = os.fsencode(path)

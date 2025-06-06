@@ -97,6 +97,7 @@ def get_batch_output(batch_response, output_file_path):
         print("No output file available")
 
 if __name__ == "__main__":
+    # Test
     file_path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_data/timeline_azure_bulk_gpt-4o-mini_notime_all_sections.jsonl"
     output_path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/timeline_azure_bulk_gpt-4o-mini_notime_all_sections_results.jsonl"
     # batch_id = upload_file(file_path)

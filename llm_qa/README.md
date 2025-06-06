@@ -2,6 +2,15 @@
 
 This directory contains scripts for building training and evaluation datasets for Large Language Models (LLMs) to learn temporal relation inference from clinical text. The output is formatted as Azure OpenAI Bulk JSONL for batch processing.
 
+## Workflow Overview
+
+The complete pipeline consists of four main steps:
+
+1. **Data Construction**: Use `/home/ubuntu/work/Temporal_relation/llm_qa/llm_qa_data_builder.py` to construct datasets in Azure bulk format
+2. **Azure OpenAI Processing**: Submit the bulk files to Azure OpenAI service using `/home/ubuntu/work/Temporal_relation/llm_qa/llm_azure_bulk.py`
+3. **Local Inference**: Alternatively, use local vLLM for inference with `/home/ubuntu/work/Temporal_relation/llm_qa/llm_local_inference.py`
+4. **Evaluation**: Evaluate the results using `/home/ubuntu/work/Temporal_relation/llm_qa/llm_evaluation.py`
+
 ## Main Script: `llm_qa_data_builder.py`
 
 The main script `llm_qa_data_builder.py` automatically builds datasets in Azure OpenAI Bulk JSONL format for all possible configurations:
