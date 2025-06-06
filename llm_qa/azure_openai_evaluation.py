@@ -202,17 +202,22 @@ def parse_datetime(date_str):
     import re
     
     # Handle various date formats and normalize them
-    for old, new in [('DURING ', ''), ('BETWEEN ', ''), ('FROM ', ''), ('MIDWAY THROUGH ', ''), ('-??', '-01'), ('-XX', '-01'), ('-xx', '-01')]:
+    for old, new in [('DURING ', ''), ('BETWEEN ', ''), ('FROM ', ''), ('MIDWAY THROUGH ', ''), ('-??', '-01'), ('-XX', '-01'), ('-xx', '-01'), ('-00', '-01')]:
         date_str = date_str.replace(old, new)
-
-    # Handle '00' day or month
-    if "-00" in date_str:
-        date_str = date_str.replace("-00", "-01")
         
     # Remove time component if present
     if "T" in date_str:
         date_str = date_str.split('T')[0]
     
+    # Remove time component with space separator - updated pattern to handle a.m./p.m.
+    time_patterns = [
+        r'\s+\d{1,2}:\d{2}(:\d{2})?\s*[ap]\.?m\.?',  # Handles "2:30 p.m.", "2:30 pm", "2:30p.m."
+        r'\s+\d{1,2}:\d{2}(:\d{2})?'                 # Handles regular "14:30", "2:30"
+    ]
+    
+    for pattern in time_patterns:
+        date_str = re.sub(pattern, '', date_str, flags=re.IGNORECASE)
+
     # Handle "Month DD, YYYY" format first (like "February 18, 1994")
     month_day_year_pattern = r'(\w+)\s+(\d+),?\s+(\d{4})'
     match = re.match(month_day_year_pattern, date_str)
@@ -397,7 +402,7 @@ def parse_label(label):
     has_date_info = any(re.search(pattern, label, re.IGNORECASE) for pattern in date_patterns)
     
     if not has_date_info:
-        print(f"No date information found in label: {label}")
+        # print(f"No date information found in label: {label}")
         return None
     
     if label.startswith('AFTER ON'):
@@ -510,11 +515,11 @@ def evaluate_azure_annotations(annotations, gold_standard):
     print(f"{'Category':<10} {'Total':<8} {'Strict Matches':<15} {'Strict Acc':<12} {'Relaxed Matches':<16} {'Relaxed Acc':<12}")
     print("-" * 80)
     
-    for cat in categories:
-        cat_total = category_totals[cat]
-        strict_acc = category_strict_matches[cat] / cat_total if cat_total > 0 else 0
-        relaxed_acc = category_relaxed_matches[cat] / cat_total if cat_total > 0 else 0
-        print(f"{cat:<10} {cat_total:<8} {category_strict_matches[cat]:<15} {strict_acc:<12.4f} {category_relaxed_matches[cat]:<16} {relaxed_acc:<12.4f}")
+    # for cat in categories:
+    #     cat_total = category_totals[cat]
+    #     strict_acc = category_strict_matches[cat] / cat_total if cat_total > 0 else 0
+    #     relaxed_acc = category_relaxed_matches[cat] / cat_total if cat_total > 0 else 0
+    #     print(f"{cat:<10} {cat_total:<8} {category_strict_matches[cat]:<15} {strict_acc:<12.4f} {category_relaxed_matches[cat]:<16} {relaxed_acc:<12.4f}")
 
 
 if __name__ == "__main__":
@@ -540,18 +545,20 @@ if __name__ == "__main__":
     # evaluate_azure_annotations(annotations_ind, gold_standard)
 
 
-    path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_azure_results/"
-    directory = os.fsencode(path)
-    
-    for file in os.listdir(directory):
-        filename = os.fsdecode(file)
-        if "all" in filename: 
-            # print(os.path.join(directory, filename))
-            annotations = get_azure_annotation_all(path+filename)
-        else:
-            annotations = get_azure_annotation_individual(path+filename)
-        print(filename)
-        evaluate_azure_annotations(annotations, gold_standard)
+    for i in range(1, 9):
+        path = "/home/ubuntu/work/Temporal_relation/llm_qa/GPT4/" + 'file' + str(i) + '/'
+        directory = os.fsencode(path)
+
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if 'results' in filename:
+                if "all" in filename: 
+                    # print(os.path.join(directory, filename))
+                    annotations = get_azure_annotation_all(path+filename)
+                else:
+                    annotations = get_azure_annotation_individual(path+filename)
+                print(filename)
+                evaluate_azure_annotations(annotations, gold_standard)
 
 
     
