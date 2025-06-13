@@ -2,13 +2,40 @@ import os, json, datetime
 from openai import AzureOpenAI
 import time
 import datetime 
-    
+
+def load_azure_config(config_path="azure_config.json"):
+    """Load Azure OpenAI configuration from JSON file."""
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        print(f"Configuration file {config_path} not found. Please create it with your Azure OpenAI settings.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error parsing {config_path}. Please check the JSON format.")
+        return None
+
+# Load configuration
+config = load_azure_config()
+if not config:
+    raise Exception("Failed to load Azure configuration")
+
+# print(config)
+
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version="2024-12-01-preview",
-    # azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    azure_endpoint="https://timelin-azure-openai.openai.azure.com/",
-    )
+    api_key=config["azure_openai"]["api_key"],
+    api_version=config["azure_openai"]["api_version"],
+    azure_endpoint=config["azure_openai"]["endpoint"],
+)
+
+
+# client = AzureOpenAI(
+#     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+#     api_version="2024-12-01-preview",
+#     # azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+#     azure_endpoint="https://timelin-azure-openai.openai.azure.com/",
+#     )
 
 def upload_file(file_path):
     """
@@ -104,3 +131,5 @@ if __name__ == "__main__":
     batch_id = 'batch_2b6c2f71-612b-4b22-a221-9e76919d9010'
     batch_response = track_batch_status(batch_id)
     get_batch_output(batch_response, output_path)
+    # print()
+
