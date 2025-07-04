@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 # import pandas as pd
 import os
+import re
 
 def get_gold_standard():
     path = '/home/ubuntu/work/Temporal_relation/'
@@ -373,6 +374,30 @@ def parse_datetime(date_str):
             return datetime.strptime(f"{year}-01-01", '%Y-%m-%d')
         raise e
 
+def label_starts_with_date_pattern(label):
+    """
+    Check if a label starts with any of the defined date patterns
+    
+    Args:
+        label (str): The label to check
+        
+    Returns:
+        bool: True if label starts with a date pattern, False otherwise
+    """
+    if not label:
+        return False
+        
+    date_patterns = [
+        r'^(18|19|20)\d{2}\b',  # Years 1800-2099 at start
+        r'^(0?[1-9]|1[0-2])[/-](0?[1-9]|[12][0-9]|3[01])[/-](\d{2}|\d{4})\b',  # MM/DD/YY or MM/DD/YYYY at start
+        r'^(0?[1-9]|[12][0-9]|3[01])[/-](0?[1-9]|1[0-2])[/-](\d{2}|\d{4})\b',  # DD/MM/YY or DD/MM/YYYY at start
+        r'^(January|February|March|April|May|June|July|August|September|October|November|December)\b',  # Full month names at start
+        r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b',  # Abbreviated month names at start
+        r'^(0?[1-9]|1[0-2])[/-](0?[1-9]|[12][0-9]|3[01])\b',  # MM/DD or MM-DD at start
+    ]
+    
+    return any(re.search(pattern, label, re.IGNORECASE) for pattern in date_patterns)
+
 
 def parse_label(label):
     # print(f"Parsing label: {label}")
@@ -385,7 +410,7 @@ def parse_label(label):
     
     # Check if label contains any date-like information
     # Look for years (4 digits), months (1-12), or common date patterns
-    import re
+    
     
     # Pattern to match years (1800-2099), months (01-12 or 1-12), days (01-31 or 1-31)
     # Also check for month names and common date separators
@@ -404,17 +429,45 @@ def parse_label(label):
         # print(f"No date information found in label: {label}")
         return None
     
-    if label.startswith('AFTER ON'):
-        label = label.replace('AFTER ON', 'AFTER')
-    elif label.startswith('AFTER OR ON'):
-        label = label.replace('AFTER OR ON', 'AFTER')
-    elif label.startswith('BEFORE ON'):
-        label = label.replace('BEFORE ON', 'BEFORE')
-    elif label.startswith('BEFORE OR ON'):
-        label = label.replace('BEFORE OR ON', 'BEFORE')
-    elif label.startswith('AT'):
-        label = label.replace('AT', 'ON')
+    # Normalize temporal preposition variants
+    preposition_replacements = {
+        'AFTER ON': 'AFTER',
+        'AFTER OR ON': 'AFTER',
+        'AFTER OR AT': 'AFTER',
+        'AFTER OR IN': 'AFTER',
+        'BEFORE ON': 'BEFORE',
+        'BEFORE OR ON': 'BEFORE',
+        'BEFORE OR AT': 'BEFORE',
+        'BEFORE OR IN': 'BEFORE',
+        'AT': 'ON',
+        'IN': 'ON'
+    }
+    
+    # Apply replacements
+    for old_prefix, new_prefix in preposition_replacements.items():
+        if label.startswith(old_prefix):
+            label = label.replace(old_prefix, new_prefix, 1)  # Replace only first occurrence
+            break
+    
+    # Handle labels that start with date patterns
+    if label_starts_with_date_pattern(label) and 'TO' not in label.upper():
+        label = 'ON ' + label  # Prepend "ON" if it starts with a date pattern
 
+    # if label.startswith('AFTER ON'):
+    #     label = label.replace('AFTER ON', 'AFTER')
+    # elif label.startswith('AFTER OR ON'):
+    #     label = label.replace('AFTER OR ON', 'AFTER')
+    # elif label.startswith('BEFORE ON'):
+    #     label = label.replace('BEFORE ON', 'BEFORE')
+    # elif label.startswith('BEFORE OR ON'):
+    #     label = label.replace('BEFORE OR ON', 'BEFORE')
+    # elif label.startswith('AT'):
+    #     label = label.replace('AT', 'ON')
+    # elif label.startswith('IN'):
+    #     label = label.replace('IN', 'ON')
+    # elif label_starts_with_date_pattern(label) and 'TO' not in label.upper():
+    #     label = 'ON ' + label  # Prepend "ON" if it starts with a date pattern
+ 
     try:
         if label.startswith('ON'):
             # Handle cases like "ON NIGHT BEFORE 2019-06-14" or "ON February 18, 1994"
