@@ -1,6 +1,7 @@
 import llm_qa_data_builder
 import json
 from datetime import datetime
+from collections import Counter, defaultdict
 # import pandas as pd
 import os
 import re
@@ -201,9 +202,22 @@ def parse_datetime(date_str):
     """Parse a date string into a datetime object, handling various formats."""
     import re
     
-    # Handle various date formats and normalize them
-    for old, new in [('DURING ', ''), ('BETWEEN ', ''), ('FROM ', ''), ('MIDWAY THROUGH ', ''), ('-??', '-01'), ('-XX', '-01'), ('-xx', '-01'), ('-00', '-01')]:
+    # Handle various date formats and normalize them, including APPROXIMATELY
+    temporal_modifiers = [
+        ('APPROXIMATELY ', ''), ('DURING ', ''), ('BETWEEN ', ''), ('FROM ', ''), 
+        ('MIDWAY THROUGH ', ''), ('ROUGHLY ', ''), ('ABOUT ', ''), ('AROUND ', ''),
+        ('-??', '-01'), ('-XX', '-01'), ('-xx', '-01'), ('-00', '-01')
+    ]
+    
+    for old, new in temporal_modifiers:
         date_str = date_str.replace(old, new)
+    
+    # Handle "BETWEEN ... AND ..." pattern - convert to "... TO ..." format
+    between_and_pattern = r'BETWEEN\s+(.+?)\s+AND\s+(.+)'
+    match = re.search(between_and_pattern, date_str, re.IGNORECASE)
+    if match:
+        start_date, end_date = match.groups()
+        date_str = f"{start_date.strip()} TO {end_date.strip()}"
         
     # Remove time component if present
     if "T" in date_str:
@@ -283,21 +297,38 @@ def parse_datetime(date_str):
     
     # Handle prefixes like "NIGHT BEFORE", "ON", "BEFORE", etc.
     if ' ' in date_str:
-        # Look for date patterns in the string
-        date_pattern = r'\b\d{4}-\d{1,2}-\d{1,2}\b'
-        date_match = re.search(date_pattern, date_str)
-        if date_match:
-            date_str = date_match.group()
-        else:
-            # Look for year patterns
-            year_pattern = r'\b(19|20)\d{2}\b'
-            year_match = re.search(year_pattern, date_str)
-            if year_match:
-                date_str = year_match.group()
+        # Handle complex temporal expressions like "2 TO 3 DAYS BEFORE 2011-06-10"
+        relative_patterns = [
+            r'^\d+\s+TO\s+\d+\s+(DAYS?|WEEKS?|MONTHS?|YEARS?)\s+BEFORE\s+(.+)$',
+            r'^(TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+TO\s+(TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+(DAYS?|WEEKS?|MONTHS?|YEARS?)\s+BEFORE\s+(.+)$',
+            r'^(TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+(DAYS?|WEEKS?|MONTHS?|YEARS?)\s+(PRIOR\s+TO|BEFORE)\s+(.+)$',
+            r'^\d+\s+(DAYS?|WEEKS?|MONTHS?|YEARS?)\s+(PRIOR\s+TO|BEFORE)\s+(.+)$'
+        ]
+        
+        for pattern in relative_patterns:
+            match = re.match(pattern, date_str, re.IGNORECASE)
+            if match:
+                # Extract the base date from the end of the expression
+                base_date_str = match.groups()[-1]  # Last group is always the base date
+                date_str = base_date_str
+                break
+        
+        if not any(re.match(pattern, date_str, re.IGNORECASE) for pattern in relative_patterns):
+            # Look for date patterns in the string
+            date_pattern = r'\b\d{4}-\d{1,2}-\d{1,2}\b'
+            date_match = re.search(date_pattern, date_str)
+            if date_match:
+                date_str = date_match.group()
             else:
-                # Fall back to last word if no clear date pattern
-                words = date_str.split(' ')
-                date_str = words[-1]
+                # Look for year patterns
+                year_pattern = r'\b(19|20)\d{2}\b'
+                year_match = re.search(year_pattern, date_str)
+                if year_match:
+                    date_str = year_match.group()
+                else:
+                    # Fall back to last word if no clear date pattern
+                    words = date_str.split(' ')
+                    date_str = words[-1]
     
     if ',' in date_str:
         date_str = date_str.split(',')[0]
@@ -401,7 +432,24 @@ def label_starts_with_date_pattern(label):
 
 def parse_label(label):
     # print(f"Parsing label: {label}")
-    if (label is None) or (label == 'None') or ('None' in label):
+    if (label is None) or (label == 'None'):
+        return None
+    
+    # Handle case where label is a dictionary (extract the value we need)
+    if isinstance(label, dict):
+        # Try to get 'datetime' field from the dictionary
+        if 'datetime' in label:
+            label = label['datetime']
+        else:
+            # If no 'datetime' key, return None
+            return None
+    
+    # Ensure label is a string
+    if not isinstance(label, str):
+        return None
+    
+    # Check for 'None' string after conversion
+    if 'None' in label:
         return None
     
     # Handle "UNKNOWN DATE" case
@@ -429,13 +477,29 @@ def parse_label(label):
         # print(f"No date information found in label: {label}")
         return None
     
+    # Normalize temporal modifiers first
+    temporal_modifiers = ['APPROXIMATELY ', 'ROUGHLY ', 'ABOUT ', 'AROUND ']
+    for modifier in temporal_modifiers:
+        if label.startswith(modifier):
+            label = label[len(modifier):].strip()
+            break
+    
+    # Handle "BETWEEN ... AND ..." pattern early - convert to "... TO ..." format
+    between_and_pattern = r'^BETWEEN\s+(.+?)\s+AND\s+(.+)$'
+    match = re.match(between_and_pattern, label, re.IGNORECASE)
+    if match:
+        start_date, end_date = match.groups()
+        label = f"{start_date.strip()} TO {end_date.strip()}"
+    
     # Normalize temporal preposition variants
     preposition_replacements = {
         'AFTER ON': 'AFTER',
+        'AFTER AT': 'AFTER',
         'AFTER OR ON': 'AFTER',
         'AFTER OR AT': 'AFTER',
         'AFTER OR IN': 'AFTER',
         'BEFORE ON': 'BEFORE',
+        'BEFORE AT': 'BEFORE',
         'BEFORE OR ON': 'BEFORE',
         'BEFORE OR AT': 'BEFORE',
         'BEFORE OR IN': 'BEFORE',
@@ -506,7 +570,71 @@ def parse_label(label):
     
     return None
 
-# Function to check interval overlap
+def extract_datetime_from_response(annotation_data, event_id):
+    """
+    Extract datetime value from various response formats
+    
+    Args:
+        annotation_data: The response data (can be dict, list, or string)
+        event_id: The event ID we're looking for
+        
+    Returns:
+        tuple: (datetime_value, clues) or (None, None) if not found
+    """
+    # Handle direct string responses
+    if isinstance(annotation_data, str):
+        return annotation_data, ''
+    
+    # Handle None or empty responses
+    if not annotation_data:
+        return None, ''
+    
+    # Handle list of responses (take first one)
+    if isinstance(annotation_data, list):
+        if len(annotation_data) > 0:
+            annotation_data = annotation_data[0]
+        else:
+            return None, ''
+    
+    # Handle dictionary responses
+    if isinstance(annotation_data, dict):
+        # Format 1: Simple format {'datetime': '...', 'clues': '...'}
+        if 'datetime' in annotation_data:
+            datetime_value = annotation_data['datetime']
+            clues = annotation_data.get('clues', '')
+            return datetime_value, clues
+        
+        # Format 2: Nested event format {'event': {'datetime': '...', 'clues': '...'}}
+        elif 'event' in annotation_data and isinstance(annotation_data['event'], dict):
+            event_data = annotation_data['event']
+            datetime_value = event_data.get('datetime')
+            clues = event_data.get('clues', '')
+            return datetime_value, clues
+        
+        # Format 3: Multiple events format {'events': [...]}
+        elif 'events' in annotation_data and isinstance(annotation_data['events'], list):
+            events = annotation_data['events']
+            
+            # Try to find the event by matching event_id with event name/type
+            for event in events:
+                if isinstance(event, dict):
+                    # Check if event matches the event_id (remove 'E' prefix for comparison)
+                    event_name = event.get('event', '')
+                    if (event_name.upper() == event_id.upper() or 
+                        event_name.upper() == event_id.replace('E', '').upper() or
+                        event_id.replace('E', '').upper() in event_name.upper()):
+                        datetime_value = event.get('datetime')
+                        clues = event.get('clues', '')
+                        return datetime_value, clues
+            
+            # If no specific match found, take the first event
+            if events and isinstance(events[0], dict):
+                datetime_value = events[0].get('datetime')
+                clues = events[0].get('clues', '')
+                return datetime_value, clues
+    
+    return None, ''
+
 def intervals_overlap(gt_interval, pred_interval):
     if not gt_interval or not pred_interval:
         return False
@@ -515,7 +643,7 @@ def intervals_overlap(gt_interval, pred_interval):
     return (label_gt==label_pred) & (max(start_gt, start_pred) <= min(end_gt, end_pred))
 
 
-def evaluate_azure_annotations(annotations, gold_standard):
+def evaluate_azure_annotations(annotations, gold_standard, show_detailed_analysis=False):
     """
     Evaluate Azure OpenAI annotations against the gold standard
     """
@@ -529,12 +657,56 @@ def evaluate_azure_annotations(annotations, gold_standard):
     total = 0
     strict_match = 0
     relaxed_match = 0
+    
+    # Error tracking
+    parsing_errors = []
+    mismatches = []
+    gt_parsing_failed = 0
+    pred_parsing_failed = 0
 
     for record_id, entries in gold_standard.items():
         total += len(entries)
         for event_id in entries.keys():
-            gt = parse_label(entries[event_id]['formatted_time_range'])
-            pred = parse_label(annotations.get(record_id, {}).get(event_id, {}).get('datetime', None))
+            gt_label = entries[event_id]['formatted_time_range']
+            
+            # Parse ground truth
+            try:
+                gt = parse_label(gt_label)
+                if gt is None:
+                    gt_parsing_failed += 1
+                    continue
+            except Exception as e:
+                gt_parsing_failed += 1
+                parsing_errors.append({
+                    'type': 'ground_truth',
+                    'record_id': record_id,
+                    'event_id': event_id,
+                    'label': gt_label,
+                    'error': str(e)
+                })
+                continue
+            
+            # Get annotation data and extract datetime/clues using the new function
+            annotation_data = annotations.get(record_id, {}).get(event_id, {})
+            datetime_value, clues = extract_datetime_from_response(annotation_data, event_id)
+            
+            # Parse prediction
+            try:
+                pred = parse_label(datetime_value)
+                if pred is None and datetime_value is not None:
+                    print(f"Error parsing prediction for record {record_id}, event {event_id}: {datetime_value}")
+                    pred_parsing_failed += 1
+            except Exception as e:
+                pred_parsing_failed += 1
+                parsing_errors.append({
+                    'type': 'prediction',
+                    'record_id': record_id,
+                    'event_id': event_id,
+                    'label': datetime_value,
+                    'error': str(e)
+                })
+                print(f"Error parsing prediction for record {record_id}, event {event_id}: {datetime_value}")
+                pred = None
             
             if gt is None:
                 continue
@@ -544,6 +716,21 @@ def evaluate_azure_annotations(annotations, gold_standard):
 
             is_strict_match = gt == pred
             is_relaxed_match = is_strict_match or (intervals_overlap(gt, pred))
+            
+            # Track mismatches for detailed analysis
+            if not is_strict_match:
+                mismatches.append({
+                    'record_id': record_id,
+                    'event_id': event_id,
+                    'category': category,
+                    'gt_label': gt_label,
+                    'gt_parsed': gt,
+                    'pred_label': datetime_value,
+                    'pred_parsed': pred,
+                    'pred_clues': clues,
+                    'is_relaxed_match': is_relaxed_match
+                })
+            
             if is_strict_match:
                 strict_match += 1
                 category_strict_matches[category] += 1
@@ -572,38 +759,92 @@ def evaluate_azure_annotations(annotations, gold_standard):
         strict_acc = category_strict_matches[cat] / cat_total if cat_total > 0 else 0
         relaxed_acc = category_relaxed_matches[cat] / cat_total if cat_total > 0 else 0
         print(f"{cat:<10} {cat_total:<8} {category_strict_matches[cat]:<15} {strict_acc:<12.4f} {category_relaxed_matches[cat]:<16} {relaxed_acc:<12.4f}")
+    
+    # Show detailed analysis if requested
+    if show_detailed_analysis:
+        print(f"\n{'='*80}")
+        print("DETAILED ERROR ANALYSIS")
+        print(f"{'='*80}")
+        
+        print(f"\nPARSING STATISTICS:")
+        print(f"Ground truth parsing failed: {gt_parsing_failed}")
+        print(f"Prediction parsing failed: {pred_parsing_failed}")
+        print(f"Total mismatches: {len(mismatches)}")
+        
+        # Show parsing errors
+        if parsing_errors:
+            print(f"\nPARSING ERRORS ({len(parsing_errors)} total):")
+            error_types = Counter([err['type'] for err in parsing_errors])
+            for error_type, count in error_types.items():
+                print(f"  {error_type}: {count} errors")
+            
+            print(f"\nSample parsing errors:")
+            for i, error in enumerate(parsing_errors[:5]):
+                print(f"  {i+1}. [{error['type']}] {error['record_id']}/{error['event_id']}")
+                print(f"     Label: '{error['label']}'")
+                print(f"     Error: {error['error']}")
+                print()
+        
+        # Analyze mismatches by category
+        if mismatches:
+            print(f"\nMISMATCH ANALYSIS BY CATEGORY:")
+            category_mismatches = {}
+            for mismatch in mismatches:
+                cat = mismatch['category']
+                if cat not in category_mismatches:
+                    category_mismatches[cat] = []
+                category_mismatches[cat].append(mismatch)
+            
+            for category, cat_mismatches in category_mismatches.items():
+                print(f"\n{category} CATEGORY ({len(cat_mismatches)} mismatches):")
+                
+                # Show prediction patterns
+                pred_patterns = Counter([str(m['pred_parsed']) for m in cat_mismatches])
+                print(f"  Most common predictions:")
+                for pattern, count in pred_patterns.most_common(5):
+                    print(f"    {pattern}: {count} times")
+                
+                # Show specific examples
+                print(f"  Sample mismatches:")
+                for i, mismatch in enumerate(cat_mismatches[:3]):
+                    print(f"    {i+1}. {mismatch['record_id']}/{mismatch['event_id']}")
+                    print(f"       GT: '{mismatch['gt_label']}' -> {mismatch['gt_parsed']}")
+                    print(f"       Pred: '{mismatch['pred_label']}' -> {mismatch['pred_parsed']}")
+                    print(f"       Pred clues: '{mismatch['pred_clues']}'")
+                    print(f"       Relaxed match: {mismatch['is_relaxed_match']}")
+                    print()
+            
+            # Show most common mismatch patterns
+            print(f"\nMOST COMMON MISMATCH PATTERNS:")
+            mismatch_patterns = Counter([
+                f"GT:{m['gt_parsed'][0] if m['gt_parsed'] else 'None'} -> Pred:{m['pred_parsed'][0] if m['pred_parsed'] else 'None'}"
+                for m in mismatches
+            ])
+            for pattern, count in mismatch_patterns.most_common(10):
+                print(f"  {pattern}: {count} times")
+        
+        print(f"\n{'='*80}")
+        print("END OF DETAILED ANALYSIS")
+        print(f"{'='*80}")
 
 
 if __name__ == "__main__":
     gold_standard = get_gold_standard()
     print(f"Gold standard loaded with {len(gold_standard)} records.")
-    # print(label_data)
-    # jsonl_file_path_all = '/home/ubuntu/work/Temporal_relation/llm_qa/qa_azure_results/timeline_azure_bulk_openai_time_all_gpt4.jsonl'
-    # jsonl_file_path_ind = '/home/ubuntu/work/Temporal_relation/llm_qa/qa_azure_results/timeline_azure_bulk_openai_notime_individual_gpt4.jsonl'
-    # # results = parse_jsonl_extract_content(jsonl_file_path_ind)
-
-    # annotations_all = get_azure_annotation_all(jsonl_file_path_all)
-    # annotations_ind = get_azure_annotation_individual(jsonl_file_path_ind)
-    # # print(len(annotations))
-    # # for key in annotations:
-    #     # print(f"{key}: {annotations[key]}")
-    # # print(set(annotations_ind.keys()) -  (set(annotations_all.keys())))
-    # # print(results['doc-541'])
-    # # print(list(label_data.items())[:1])
-    # # print(list(annotations_ind.items())[:1])
-    # # print(list(annotations_all.items())[:1])
-    # # print(results['doc-491-task-E9'])
-    # # print(annotations_ind['422'])
-    # evaluate_azure_annotations(annotations_all, gold_standard)
-    # evaluate_azure_annotations(annotations_ind, gold_standard)
-
+    
+    # Show detailed analysis for one specific file
+    # detailed_file = "timeline_azure_bulk_gpt-4o-mini_notime_all_sections_results.jsonl"
+    detailed_file = "timeline_azure_bulk_gpt-4o-mini_notime_individual_results.jsonl"
+    
     # NEED TO UPDATE THE PATHS BELOW
-    for i in range(1, 9):
-        path = "/home/ubuntu/work/Temporal_relation/llm_qa/GPT4/" + 'file' + str(i) + '/'
-        directory = os.fsencode(path)
+    path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/test/" 
+    directory = os.fsencode(path)
 
-        for file in os.listdir(directory):
-            filename = os.fsdecode(file)
+    for file in os.listdir(directory):
+        filename = os.fsdecode(file)
+        show_details = (filename == detailed_file)
+        # show_details = True
+        if show_details:
             if 'results' in filename:
                 if "all" in filename: 
                     # print(os.path.join(directory, filename))
@@ -611,9 +852,13 @@ if __name__ == "__main__":
                 else:
                     annotations = get_azure_annotation_individual(path+filename)
                 print(filename)
-                evaluate_azure_annotations(annotations, gold_standard)
+                
+                # Show detailed analysis for the specified file
+                
+                # print(annotations)
+                evaluate_azure_annotations(annotations, gold_standard, show_detailed_analysis=show_details)
 
 
-    
+
 
 
