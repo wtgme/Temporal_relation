@@ -6,9 +6,9 @@ from collections import Counter, defaultdict
 import os
 import re
 
-def get_gold_standard():
+def get_gold_standard(folder='timeline_training'):
     path = '/home/ubuntu/work/Temporal_relation/'
-    data_dir = path + "data/timeline_training/"
+    data_dir = path + "data/" + folder + "/"
     results = {}
 
     data = llm_qa_data_builder.data_load(data_dir, True)
@@ -219,14 +219,16 @@ def parse_datetime(date_str):
         start_date, end_date = match.groups()
         date_str = f"{start_date.strip()} TO {end_date.strip()}"
         
-    # Remove time component if present
+    # Remove time component if present - improved patterns
     if "T" in date_str:
         date_str = date_str.split('T')[0]
     
-    # Remove time component with space separator - updated pattern to handle a.m./p.m.
+    # Remove time component with space separator - updated pattern to handle more cases
     time_patterns = [
-        r'\s+\d{1,2}:\d{2}(:\d{2})?\s*[ap]\.?m\.?',  # Handles "2:30 p.m.", "2:30 pm", "2:30p.m."
-        r'\s+\d{1,2}:\d{2}(:\d{2})?'                 # Handles regular "14:30", "2:30"
+        r'\s+AT\s+\d{1,2}:\d{2}(:\d{2})?',                    # Handles "AT 21:16:00", "AT 14:30"
+        r'\s+\d{1,2}:\d{2}(:\d{2})?\s*[ap]\.?m\.?',          # Handles "2:30 p.m.", "2:30 pm", "2:30p.m."
+        r'\s+\d{1,2}:\d{2}(:\d{2})?',                        # Handles regular "14:30", "2:30"
+        r'\s+at\s+\d{1,2}:\d{2}(:\d{2})?\s*[ap]\.?m\.?',     # Handles "at 2:30 p.m."
     ]
     
     for pattern in time_patterns:
@@ -495,6 +497,8 @@ def parse_label(label):
     preposition_replacements = {
         'AFTER ON': 'AFTER',
         'AFTER AT': 'AFTER',
+        'POST': 'AFTER',
+        'SINCE': 'AFTER',
         'AFTER OR ON': 'AFTER',
         'AFTER OR AT': 'AFTER',
         'AFTER OR IN': 'AFTER',
@@ -503,6 +507,8 @@ def parse_label(label):
         'BEFORE OR ON': 'BEFORE',
         'BEFORE OR AT': 'BEFORE',
         'BEFORE OR IN': 'BEFORE',
+        'BACK IN': 'ON',
+        'BY': 'BEFORE',
         'AT': 'ON',
         'IN': 'ON'
     }
@@ -516,21 +522,6 @@ def parse_label(label):
     # Handle labels that start with date patterns
     if label_starts_with_date_pattern(label) and 'TO' not in label.upper():
         label = 'ON ' + label  # Prepend "ON" if it starts with a date pattern
-
-    # if label.startswith('AFTER ON'):
-    #     label = label.replace('AFTER ON', 'AFTER')
-    # elif label.startswith('AFTER OR ON'):
-    #     label = label.replace('AFTER OR ON', 'AFTER')
-    # elif label.startswith('BEFORE ON'):
-    #     label = label.replace('BEFORE ON', 'BEFORE')
-    # elif label.startswith('BEFORE OR ON'):
-    #     label = label.replace('BEFORE OR ON', 'BEFORE')
-    # elif label.startswith('AT'):
-    #     label = label.replace('AT', 'ON')
-    # elif label.startswith('IN'):
-    #     label = label.replace('IN', 'ON')
-    # elif label_starts_with_date_pattern(label) and 'TO' not in label.upper():
-    #     label = 'ON ' + label  # Prepend "ON" if it starts with a date pattern
  
     try:
         if label.startswith('ON'):
@@ -569,7 +560,6 @@ def parse_label(label):
         return None
     
     return None
-
 def extract_datetime_from_response(annotation_data, event_id):
     """
     Extract datetime value from various response formats
@@ -826,39 +816,85 @@ def evaluate_azure_annotations(annotations, gold_standard, show_detailed_analysi
         print(f"\n{'='*80}")
         print("END OF DETAILED ANALYSIS")
         print(f"{'='*80}")
+        
+    return strict_accuracy, relaxed_accuracy, category_totals, category_strict_matches, category_relaxed_matches
 
 
 if __name__ == "__main__":
-    gold_standard = get_gold_standard()
+    import pandas as pd
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    folder = 'timeline_training_llm_update'
+    # folder = 'timeline_training'
+
+    gold_standard = get_gold_standard(folder)
     print(f"Gold standard loaded with {len(gold_standard)} records.")
     
-    # Show detailed analysis for one specific file
-    # detailed_file = "timeline_azure_bulk_gpt-4o-mini_notime_all_sections_results.jsonl"
-    detailed_file = "timeline_azure_bulk_gpt-4o-mini_notime_individual_results.jsonl"
+    # OpenAI Azure annotations
+    # path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/timeline_training/" 
+    # Local LLM annotations
+    path = "/home/ubuntu/zhaoyue/Temporal_relation/llm_qa/qa_results/llama3/" 
     
-    # NEED TO UPDATE THE PATHS BELOW
-    path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/test/" 
+    
+    # path = path + folder + '/'
+    print(f"Processing files in directory: {path}")
     directory = os.fsencode(path)
-
+    results = []
     for file in os.listdir(directory):
         filename = os.fsdecode(file)
-        show_details = (filename == detailed_file)
-        # show_details = True
-        if show_details:
-            if 'results' in filename:
-                if "all" in filename: 
-                    # print(os.path.join(directory, filename))
-                    annotations = get_azure_annotation_all(path+filename)
-                else:
-                    annotations = get_azure_annotation_individual(path+filename)
-                print(filename)
-                
-                # Show detailed analysis for the specified file
-                
-                # print(annotations)
-                evaluate_azure_annotations(annotations, gold_standard, show_detailed_analysis=show_details)
+        if 'results' in filename:
+            tokens = filename.split('_')
+            model = tokens[3]
+            time = 'no_time' if 'notime' in filename else 'time'
+            section = 'sections' if 'sections' in filename else 'no_sections'
+            if "all" in filename: 
+                annotations = get_azure_annotation_all(path+filename)
+                mode = 'all'
+            else:
+                annotations = get_azure_annotation_individual(path+filename)
+                mode = 'individual'
+            print(filename)
+            
+            strict_accuracy, relaxed_accuracy, category_totals, category_strict_matches, category_relaxed_matches = evaluate_azure_annotations(annotations, gold_standard, show_detailed_analysis=False)
+            results.append([model, mode, time, section, filename, strict_accuracy, relaxed_accuracy])
+    
+    df = pd.DataFrame(results, columns=['Model', 'Mode', 'Time', 'Section', 'Filename', 'Strict Accuracy', 'Relaxed Accuracy'])
+    
+    # Create combined setting identifier
+    df['Setting'] = df['Model'] + '_' + df['Mode'] + '_' + df['Time'] + '_' + df['Section']
+    
+    # Reshape data for combined plotting
+    df_melted = df.melt(
+        id_vars=['Setting'],
+        value_vars=['Strict Accuracy', 'Relaxed Accuracy'],
+        var_name='Accuracy Type',
+        value_name='Accuracy'
+    )
+    print(df_melted.head())
+    df_melted = df_melted.sort_values(by='Accuracy')
+    # Single plot with both accuracy types per setting
+    plt.figure(figsize=(14, 8))
+    sns.barplot(data=df_melted, x='Setting', y='Accuracy', hue='Accuracy Type')
+
+    plt.title('Model Performance: Strict vs Relaxed Accuracy by Configuration')
+    plt.xticks(rotation=45, ha='right')
+    plt.ylabel('Accuracy')
+    plt.legend(title='Accuracy Type')
+    plt.tight_layout()
+    plt.savefig(f'/home/ubuntu/work/Temporal_relation/llm_qa/accuracy_comparison.png', dpi=300, bbox_inches='tight')
+    print(f"Plot saved to accuracy_comparison.png")
+
+    # Save results
+    df.to_csv(f'/home/ubuntu/work/Temporal_relation/llm_qa/{folder}.csv', index=False)
+    print(f"Results saved to {folder}.csv")
 
 
 
-
+# change folder = 'timeline_training'
+# python llm_evaluation.py > evaluation.log
+# change folder = 'timeline_training_llm_update'
+# python llm_evaluation.py > evaluation_llm_update.log
 

@@ -651,17 +651,18 @@ def main():
             "output_dir": path + "llm_qa/qa_data/timeline_training",
             "name": "timeline_training"
         },
-        {
-            "data_dir": path + "data/timeline_training_llm_update/",
-            "output_dir": path + "llm_qa/qa_data/timeline_training_llm_update",
-            "name": "timeline_training_llm_update"
-        }
+        # {
+        #     "data_dir": path + "data/timeline_training_llm_update/",
+        #     "output_dir": path + "llm_qa/qa_data/timeline_training_llm_update",
+        #     "name": "timeline_training_llm_update"
+        # }
     ]
     
     # Define common arguments
     common_args = {
         "limit": 50000000,
-        "model": "gpt-4o-mini"
+        # "model": "gpt-4o-mini"
+        "model": "o3-mini"
         # "model": "o4-mini"
     }
     
