@@ -834,9 +834,9 @@ if __name__ == "__main__":
     print(f"Gold standard loaded with {len(gold_standard)} records.")
     
     # OpenAI Azure annotations
-    # path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/timeline_training/" 
+    path = "/home/ubuntu/work/Temporal_relation/llm_qa/qa_results/local/" 
     # Local LLM annotations
-    path = "/home/ubuntu/zhaoyue/Temporal_relation/llm_qa/qa_results/llama3/" 
+    # path = "/home/ubuntu/zhaoyue/Temporal_relation/llm_qa/qa_results/deepseek/" 
     
     
     # path = path + folder + '/'
@@ -845,7 +845,8 @@ if __name__ == "__main__":
     results = []
     for file in os.listdir(directory):
         filename = os.fsdecode(file)
-        if 'results' in filename:
+
+        if 'results' in filename and "DeepSeek" in filename:
             tokens = filename.split('_')
             model = tokens[3]
             time = 'no_time' if 'notime' in filename else 'time'

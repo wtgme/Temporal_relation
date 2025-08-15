@@ -839,8 +839,8 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    folder = 'timeline_training_llm_update'
-    # folder = 'timeline_training'
+    # folder = 'timeline_training_llm_update'
+    folder = 'timeline_training'
 
     gold_standard = get_gold_standard(folder)
     print(f"Gold standard loaded with {len(gold_standard)} records.")
